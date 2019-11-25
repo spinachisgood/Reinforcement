@@ -47,7 +47,7 @@ class Maze:
     STEP_REWARD = -1
     GOAL_REWARD = 0
     CAUGHT_REWARD = -1 # Set Reward for getting caught
-    IMPOSSIBLE_REWARD = -10000
+    IMPOSSIBLE_REWARD = -100
 
 
     def __init__(self, maze, weights=None, random_rewards=False):
@@ -59,8 +59,7 @@ class Maze:
         self.n_actions                = len(self.actions);
         self.n_states                 = len(self.states);
         self.transition_probabilities = self.__transitions();
-        self.rewards                  = self.__rewards(weights=weights,
-                                                random_rewards=random_rewards);
+        self.rewards                  = self.__rewards(weights=weights,random_rewards=random_rewards);
 
 # ACTIONS AND STATES ARE PERFECT
     def __actions(self):
@@ -162,6 +161,8 @@ class Maze:
             for a in range(self.n_actions):
                 #print('The action is :',a)
                 temp_s = self.__move(s,a);# First we determinsitically choose a player's move then minotaur's move
+                if(temp_s==s and a!=self.STAY):
+                    continue
                 count =0; # To keep track of allowed minotaur moves
                 #Then we need to map probabilites for every allowed random walk of the minotaur
                 print('Temp_s is ',temp_s)
@@ -176,14 +177,14 @@ class Maze:
                     if(a_m!=self.STAY):
                         new_temp = self.random_walk(temp_s,a_m)
                         if(new_temp!=temp_s):
-                            transition_probabilities[new_temp,s,a] = 1/(count+1)
+                            transition_probabilities[new_temp,s,a] = 1/(count)
             #print("requested values are")
             #print(transition_probabilities)
             return transition_probabilities;
 
     def __rewards(self, weights=None, random_rewards=None):
 
-        rewards = -1000*np.ones((self.n_states, self.n_actions));
+        rewards = -1000*np.zeros((self.n_states, self.n_actions));
 
         # If the rewards are not described by a weight matrix
         if weights is None:
@@ -192,6 +193,7 @@ class Maze:
                     temp_s = self.__move(s,a);
                     if(temp_s == s and a!=self.STAY):
                         continue
+                    expectation= 0;
                     for b in range(1,self.n_actions):
                         if(b!=self.STAY): #minotaur has to move
                             next_s = self.random_walk(temp_s,b)
@@ -201,18 +203,21 @@ class Maze:
                             s2 = self.states[next_s][2];
                             s3 = self.states[next_s][3];
                             if self.maze[s0,s1]==1: #Wall 
-                                rewards[s,a] = self.IMPOSSIBLE_REWARD;
+                                expectation += self.IMPOSSIBLE_REWARD * self.transition_probabilities[next_s,s,b];
                             # Reward for reaching the exit
                             
                             elif s == next_s and self.maze[s0,s1] == 2: # Goal state
-                                rewards[s,a] = self.GOAL_REWARD;
+                                expectation += self.GOAL_REWARD * self.transition_probabilities[next_s,s,b];
                             # Reward for taking a step to an empty cell that is not the exit
                             
                             elif (s0 == s2) and (s1==s3): # caught state
-                                rewards[s,a] = self.CAUGHT_REWARD;
+                                expectation+=self.CAUGHT_REWARD* self.transition_probabilities[next_s,s,b];
                             else:                           # Generic Case
-                                rewards[s,a] = self.STEP_REWARD; 
+                                expectation+=self.STEP_REWARD* self.transition_probabilities[next_s,s,b];
 
+                    
+                    
+                    rewards[s,a] = expectation;
                             # # If there exists trapped cells with probability 0.5
                             # if random_rewards and self.maze[self.states[next_s]]<0:
                             #     row, col = self.states[next_s];
@@ -222,6 +227,8 @@ class Maze:
                             #     r2 = rewards[s,a];
                             #     # The average reward
                             #     rewards[s,a] = 0.5*r1 + 0.5*r2;
+        
+        
         # If the weights are descrobed by a weight matrix
         else:
             for s in range(self.n_states):
@@ -508,8 +515,8 @@ def animate_solution(maze, path):
                 grid.get_celld()[(path[i][0],path[i][1])].set_facecolor(LIGHT_GREEN)
                 grid.get_celld()[(path[i][0],path[i][1])].get_text().set_text('Player is out')
             else:
-                grid.get_celld()[(path[i-1][0],path[i-1][1])].set_facecolor(col_map[maze[path[i-1][0],path[i-1][1]]])
-                grid.get_celld()[(path[i-1][0],path[i-1][1])].get_text().set_text('')
+                # grid.get_celld()[(path[i-1][0],path[i-1][1])].set_facecolor(col_map[maze[path[i-1][0],path[i-1][1]]])
+                # grid.get_celld()[(path[i-1][0],path[i-1][1])].get_text().set_text('')
                 grid.get_celld()[(path[i-1][2],path[i-1][3])].set_facecolor(col_map[maze[path[i-1][2],path[i-1][3]]])
                 grid.get_celld()[(path[i-1][2],path[i-1][3])].get_text().set_text('')
                 
