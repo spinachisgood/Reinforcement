@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 from IPython import display
+import random
 
 # Implemented methods
 methods = ['DynProg', 'ValIter'];
@@ -35,7 +36,7 @@ class Maze:
     # Reward values
     STEP_REWARD = -1
     GOAL_REWARD = 0
-    CAUGHT_REWARD = -5 # Set Reward for getting caught
+    CAUGHT_REWARD = -1 # Set Reward for getting caught
     IMPOSSIBLE_REWARD = -100
 
 
@@ -71,7 +72,7 @@ class Maze:
                     for l in range(self.maze.shape[1]):
                         if self.maze[i,j] != 1:
                             states[s] = (i,j,k,l); # make the state as a quadraple
-                            map[(i,j)] = s;
+                            map[(i,j,k,l)] = s;
                             s += 1;
         return states, map
 
@@ -83,28 +84,33 @@ class Maze:
         """
         # Compute the future position given current (state, action)
         i =0;
+        s0 = self.states[state][0];
+        s1 = self.states[state][1];
+        s2 = self.states[state][2];
+        s3 = self.states[state][3];
         if(agent == 'minotaur'):
             i=2; # So that we can move the minotaur's coordinates
         row = self.states[state][i] + self.actions[action][0];
         col = self.states[state][i+1] + self.actions[action][1];
+        
         # Is the future position an impossible one ?
         hitting_maze_walls =  (row == -1) or (row == self.maze.shape[0]) or \
                               (col == -1) or (col == self.maze.shape[1]) or \
                               (self.maze[row,col] == 1);
                               
-        hitting_wall = hitting_maze_walls  and (not self.maze[row,col]==1) ##Check for only for boundaries and not for obstacles
+        hitting_wall = (row==-1) or (row ==self.maze.shape[0]) or (col==-1) or (col==self.maze.shape[1]) ##Check for only for boundaries and not for obstacles
         # Based on the impossiblity check return the next state.
         
         if agent=='player':
             if hitting_maze_walls:
                 return state;
             else:
-                return self.map[(row, col)];
+                return self.map[(row, col,s2,s3)];
         else :
             if hitting_wall:
                 return state;
             else:
-                return self.map[(row,col)];    
+                return self.map[(s0,s1,row,col)];
 
     def __transitions(self):
         """ Computes the transition probabilities for every state action pair.
@@ -119,8 +125,23 @@ class Maze:
         # are deterministic.
         for s in range(self.n_states):
             for a in range(self.n_actions):
-                next_s = self.__move(s,a);
-                transition_probabilities[next_s, s, a] = 1;
+                print('The action is :',a)
+                temp_s = self.__move(s,a,'player');# First we determinsitically choose a player's move then minotaur's move
+                if(temp_s ==s) and (a!=self.STAY):
+                    continue
+                # This part sucks ! First we have to find the number of allowed moves for our minotaur dude
+                allowed_moves =0;
+                for b in range(self.n_actions):
+                    if(b!=self.STAY):
+                        next_s = self.__move(temp_s,a,'minotaur');
+                        if(next_s!=temp_s):
+                            allowed_moves = allowed_moves +1;
+                # Then we assign transition probabilites based on the possiilities            
+                for c in range(self.n_actions):
+                    if(c!=self.STAY):
+                        next_s = self.__move(temp_s,a,'minotaur');
+                        if(allowed_moves!=0):
+                            transition_probabilities[next_s,s,c] = 1/(max(1,allowed_moves));
         return transition_probabilities;
 
     def __rewards(self, weights=None, random_rewards=None):
@@ -131,14 +152,22 @@ class Maze:
         if weights is None:
             for s in range(self.n_states):
                 for a in range(self.n_actions):
-                    next_s = self.__move(s,a);
+                    next_s = self.__move(s,a,'player');
                     # Rewrd for hitting a wall
+                    s0 = self.states[next_s][0];
+                    s1 = self.states[next_s][1];
+                    s2 = self.states[next_s][2];
+                    s3 = self.states[next_s][3];
                     if s == next_s and a != self.STAY:
                         rewards[s,a] = self.IMPOSSIBLE_REWARD;
                     # Reward for reaching the exit
-                    elif s == next_s and self.maze[self.states[next_s]] == 2:
+                    
+                    elif s == next_s and self.maze[s0,s1] == 2:
                         rewards[s,a] = self.GOAL_REWARD;
                     # Reward for taking a step to an empty cell that is not the exit
+                    
+                    elif (s0 == s2) and (s1==s3):
+                        rewards[s,a] = self.CAUGHT_REWARD;
                     else:
                         rewards[s,a] = self.STEP_REWARD;
 
@@ -176,9 +205,25 @@ class Maze:
             s = self.map[start];
             # Add the starting position in the maze to the path
             path.append(start);
+            print(path)
             while t < horizon-1:
                 # Move to next state given the policy and the current state
-                next_s = self.__move(s,policy[s,t]);
+                temp_s = self.__move(s,policy[s,t],'player');
+                
+                #policy determines best action for player but not for minotaur which is random
+            
+                while True:
+                    a_m =random.randint(1,4)
+                    next_s = self.__move(s,a_m,'minotaur');
+                    if(next_s!=temp_s):
+                        break;
+                
+                
+                
+                
+                # Confused about how to account for the minotaur's move
+                
+                
                 # Add the position in the maze corresponding to the next state
                 # to the path
                 path.append(self.states[next_s])
@@ -192,7 +237,14 @@ class Maze:
             # Add the starting position in the maze to the path
             path.append(start);
             # Move to next state given the policy and the current state
-            next_s = self.__move(s,policy[s]);
+            temp_s = self.__move(s,policy[s],'player');
+            while True:
+                    a_m = random.randint(1,4)
+                    next_s = self.__move(s,a_m,'minotaur');
+                    if(next_s!=temp_s):
+                        break;
+            
+            
             # Add the position in the maze corresponding to the next state
             # to the path
             path.append(self.states[next_s]);
@@ -398,16 +450,25 @@ def animate_solution(maze, path):
 
 
     # Update the color at each frame
+
     for i in range(len(path)):
-        grid.get_celld()[(path[i])].set_facecolor(LIGHT_ORANGE)
-        grid.get_celld()[(path[i])].get_text().set_text('Player')
+        print(path[i]);
+        grid.get_celld()[(path[i][0],path[i][1])].set_facecolor(LIGHT_ORANGE)
+        grid.get_celld()[(path[i][0],path[i][1])].get_text().set_text('Player')
+        grid.get_celld()[(path[i][2],path[i][3])].set_facecolor(LIGHT_RED)
+        grid.get_celld()[(path[i][2],path[i][3])].get_text().set_text('Minotaur')
+        
         if i > 0:
             if path[i] == path[i-1]:
-                grid.get_celld()[(path[i])].set_facecolor(LIGHT_GREEN)
-                grid.get_celld()[(path[i])].get_text().set_text('Player is out')
+                grid.get_celld()[(path[i][0],path[i][1])].set_facecolor(LIGHT_GREEN)
+                grid.get_celld()[(path[i][0],path[i][1])].get_text().set_text('Player is out')
             else:
-                grid.get_celld()[(path[i-1])].set_facecolor(col_map[maze[path[i-1]]])
-                grid.get_celld()[(path[i-1])].get_text().set_text('')
+                grid.get_celld()[(path[i-1][0],path[i-1][1])].set_facecolor(col_map[maze[path[i-1][0],path[i-1][1]]])
+                grid.get_celld()[(path[i-1][0],path[i-1][1])].get_text().set_text('')
+                grid.get_celld()[(path[i-1][2],path[i-1][3])].set_facecolor(col_map[maze[path[i-1][2],path[i-1][3]]])
+                grid.get_celld()[(path[i-1][2],path[i-1][3])].get_text().set_text('')
+                
+                
         display.display(fig)
         display.clear_output(wait=True)
         time.sleep(1)
